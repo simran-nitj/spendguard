@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CategoryType {
+  INCOME
+  EXPENSE
+}
+
+enum FraudRule {
+  LARGE_AMOUNT
+  HIGH_VELOCITY
+  DUPLICATE
+  NEW_MERCHANT_HIGH_VALUE
+}
+
+enum FraudSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum FraudStatus {
+  OPEN
+  REVIEWED
+  DISMISSED
+}
+
+model User {
+  id           String         @id @default(uuid())
+  email        String         @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  
+  refreshTokens RefreshToken[]
+  categories    Category[]
+  transactions  Transaction[]
+  fraudFlags    FraudFlag[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Category {
+  id        String       @id @default(uuid())
+  userId    String?
+  name      String
+  type      CategoryType
+  createdAt DateTime     @default(now())
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@unique([userId, name])
+  @@map("categories")
+}
+
+model Transaction {
+  id          String       @id @default(uuid())
+  userId      String
+  categoryId  String
+  amount      Decimal      @db.Decimal(12, 2)
+  type        CategoryType
+  merchant    String
+  description String?
+  occurredAt  DateTime
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   Category    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  fraudFlags FraudFlag[]
+
+  @@index([userId, occurredAt])
+  @@index([userId, categoryId])
+  @@map("transactions")
+}
+
+model FraudFlag {
+  id            String        @id @default(uuid())
+  transactionId String
+  userId        String
+  rule          FraudRule
+  severity      FraudSeverity
+  reason        String
+  status        FraudStatus   @default(OPEN)
+  createdAt     DateTime      @default(now())
+  resolvedAt    DateTime?
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("fraud_flags")
+}
